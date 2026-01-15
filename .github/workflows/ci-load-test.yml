@@ -40,6 +40,7 @@ jobs:
       - name: Run Load Test
         id: k6test
         run: |
+          sleep 20 # Extra time for NGINX to be fully ready
           # k6 hits localhost which is mapped via kind-config.yaml
           k6 run scripts/load-test.js --summary-export=result.json
 
@@ -49,30 +50,33 @@ jobs:
           script: |
             const fs = require('fs');
             if (!fs.existsSync('result.json')) {
-              core.setFailed('result.json not found. Load test likely failed.');
+              core.setFailed('result.json not found.');
               return;
             }
-
+              
             const results = JSON.parse(fs.readFileSync('result.json'));
             const metrics = results.metrics || {};
-
-            const avgLatency = metrics.http_req_duration?.values?.avg?.toFixed(2) ?? 'N/A';
-            const p95Latency = metrics.http_req_duration?.values?.['p(95)']?.toFixed(2) ?? 'N/A';
-            const reqRate = metrics.http_reqs?.values?.rate?.toFixed(2) ?? '0';
-
+              
+            // 1. Calculate values
+            const avg = metrics.http_req_duration?.values?.avg?.toFixed(2) ?? 'N/A';
+            const p95 = metrics.http_req_duration?.values?.['p(95)']?.toFixed(2) ?? 'N/A';
+            const rate = metrics.http_reqs?.values?.rate?.toFixed(2) ?? '0';
             const fails = metrics.http_req_failed?.values?.fails ?? 0;
             const count = metrics.http_reqs?.values?.count ?? 0;
-            const successRate = count > 0 ? ((count - fails) / count * 100).toFixed(2) : '0';
-
-            const comment = `### 🚀 Load Test Results
-            - **Avg Latency:** ${avgLatency}ms
-            - **P95 Latency:** ${p95Latency}ms
-            - **Requests/sec:** ${reqRate}
-            - **Success Rate:** ${successRate}%`;
-
-            github.rest.issues.createComment({
+            const success = count > 0 ? ((count - fails) / count * 100).toFixed(2) : '0';
+              
+            // 2. Build the string using standard JS template literals
+            // Note: Ensure there are NO backslashes before the $ signs
+            const body = `### 🚀 Load Test Results
+            - **Avg Latency:** ${avg}ms
+            - **P95 Latency:** ${p95}ms
+            - **Requests/sec:** ${rate}
+            - **Success Rate:** ${success}%`;
+              
+            // 3. Post the comment
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: comment
+              body: body
             });
