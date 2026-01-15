@@ -55,42 +55,26 @@ jobs:
               const path = './result.json';
               
               if (!fs.existsSync(path)) {
-                console.log("File not found at: " + path);
+                console.log("result.json not found");
                 return;
               }
               
-              const results = JSON.parse(fs.readFileSync(path, 'utf8'));
+              const res = JSON.parse(fs.readFileSync(path, 'utf8'));
+              const m = res.metrics;
               
-              // Helper function to safely get nested metrics
-              const getMetric = (path, key) => {
-                const val = path?.[key];
-                return val !== undefined ? val : null;
-              };
+              // Direct extraction from the k6 metrics object
+              const avg = m['http_req_duration']?.values?.avg ?? null;
+              const p95 = m['http_req_duration']?.values?.['p(95)'] ?? null;
+              const rate = m['http_reqs']?.values?.rate ?? 0;
+              const count = m['http_reqs']?.values?.count ?? 0;
+              const fails = m['http_req_failed']?.values?.passes ?? 0;
               
-              const metrics = results.metrics || {};
-              
-              // k6 Summary Export paths
-              const httpReqDuration = metrics['http_req_duration']?.values || {};
-              const httpReqs = metrics['http_reqs']?.values || {};
-              const httpFail = metrics['http_req_failed']?.values || {};
-              
-              const avg = httpReqDuration['avg'] ? httpReqDuration['avg'].toFixed(2) : 'N/A';
-              const p95 = httpReqDuration['p(95)'] ? httpReqDuration['p(95)'].toFixed(2) : 'N/A';
-              const rate = httpReqs['rate'] ? httpReqs['rate'].toFixed(2) : '0';
-              
-              // Success Rate calculation
-              const count = httpReqs['count'] || 0;
-              const fails = httpFail['passes'] || 0; // In summary-export, 'passes' on http_req_failed = number of failures
-              
-              let successRate = '0';
-              if (count > 0) {
-                successRate = (((count - fails) / count) * 100).toFixed(2);
-              }
+              const successRate = count > 0 ? (((count - fails) / count) * 100).toFixed(2) : '0';
               
               const commentBody = `### 🚀 Load Test Results
-              - **Avg Latency:** ${avg}ms
-              - **P95 Latency:** ${p95}ms
-              - **Requests/sec:** ${rate}
+              - **Avg Latency:** ${avg ? avg.toFixed(2) + 'ms' : 'N/A'}
+              - **P95 Latency:** ${p95 ? p95.toFixed(2) + 'ms' : 'N/A'}
+              - **Requests/sec:** ${Number(rate).toFixed(2)}
               - **Success Rate:** ${successRate}%`;
               
               await github.rest.issues.createComment({
