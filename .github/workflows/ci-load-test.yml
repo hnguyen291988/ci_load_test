@@ -62,10 +62,10 @@ jobs:
             const successRate = count > 0 ? ((count - fails) / count * 100).toFixed(2) : '0';
 
             const comment = `### 🚀 Load Test Results
-            - **Avg Latency:** \${avgLatency}ms
-            - **P95 Latency:** \${p95Latency}ms
-            - **Requests/sec:** \${reqRate}
-            - **Success Rate:** \${successRate}%`;
+            - **Avg Latency:** ${avgLatency}ms
+            - **P95 Latency:** ${p95Latency}ms
+            - **Requests/sec:** ${reqRate}
+            - **Success Rate:** ${successRate}%`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
