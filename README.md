@@ -62,5 +62,6 @@ Documentation & Refinement: 1 hour
 
 Observability: Integrating a Prometheus sidecar to capture CPU and Memory utilization during load spikes.
 
-
 Author: Hai Nguyen – Devops Engineer
++2
+

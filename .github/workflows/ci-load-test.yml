@@ -6,9 +6,14 @@ on:
 jobs:
   integration-test:
     runs-on: ubuntu-latest
+    # Grant permissions to post the PR comment
+    permissions:
+      contents: read
+      pull-requests: write
+
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Create KinD Cluster
         uses: helm/kind-action@v1.4.0
@@ -19,6 +24,8 @@ jobs:
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
           kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+          # Small buffer for NGINX to start listening
+          sleep 10
 
       - name: Deploy Applications
         run: |
@@ -30,28 +37,49 @@ jobs:
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
 
-      - name: Run Load Test
-        id: k6test
+      # In your load-test workflow, in the step that runs k6
+      - name: Run k6 load test
         run: |
-          # Use --add-host to map localhost names inside the CI runner
-          k6 run scripts/load-test.js --summary-export=result.json
+          k6 run --quiet \
+            --summary-export=results-summary.json \
+            --out json=results-raw.json \
+            scripts/load-test.js
 
-      - name: Post Results to PR
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const fs = require('fs');
-            const results = JSON.parse(fs.readFileSync('result.json'));
-            const metrics = results.metrics;
-            const comment = `### 🚀 Load Test Results
-            - **Avg Latency:** ${metrics.http_req_duration.values.avg.toFixed(2)}ms
-            - **P95 Latency:** ${metrics.http_req_duration.values['p(95)'].toFixed(2)}ms
-            - **Requests/sec:** ${metrics.http_reqs.values.rate.toFixed(2)}
-            - **Success Rate:** ${(metrics.http_req_failed.values.fails / metrics.http_reqs.values.count * 100).toFixed(2)}%`;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
+      - name: Debug - Show k6 results file
+        if: always()
+        run: |
+                ls -l results-summary.json || echo "File missing!"
+                cat results-summary.json || echo "File empty or not found"
+
+      - name: Post Load Test Results to PR
+        if: always()   # run even if k6 had threshold failures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+                # Use jq to safely extract values (install jq if not present)
+                sudo apt-get update && sudo apt-get install -y jq
+                
+                AVG=$(jq -r '.metrics.http_req_duration.avg // "N/A"' results-summary.json 2>/dev/null || echo "N/A")
+                P95=$(jq -r '.metrics.http_req_duration["p(95)"] // "N/A"' results-summary.json 2>/dev/null || echo "N/A")
+                RPS=$(jq -r '.metrics.http_reqs.rate // "0.00"' results-summary.json 2>/dev/null || echo "0.00")
+                
+                # Success rate from checks (most common for overall success %)
+                CHECK_RATE=$(jq -r '.metrics.checks.value // 0' results-summary.json 2>/dev/null || echo 0)
+                SUCCESS=$(awk "BEGIN {printf \"%.2f\", $CHECK_RATE * 100}")
+                
+                
+                {
+                  echo "**Load Test Results**"
+                  echo ""
+                  echo "* Avg Latency: ${AVG} ms"
+                  echo "* P95 Latency: ${P95} ms"
+                  echo "* Requests/sec: ${RPS}"
+                  echo "* Success Rate: ${SUCCESS}%"
+                  echo ""
+                  echo "(Generated from k6 summary export)"
+                } > comment.md
+                
+                # Post comment (works for both PRs and issue-like comments)
+                gh pr comment ${{ github.event.pull_request.number || github.event.number }} \
+                  --body-file comment.md \
+                  --repo ${{ github.repository }}
