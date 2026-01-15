@@ -52,34 +52,33 @@ jobs:
         with:
             script: |
               const fs = require('fs');
-              const path = './result.json';
+              // Read and parse the file
+              const fileContent = fs.readFileSync('./result.json', 'utf8');
+              const data = JSON.parse(fileContent);
+              const m = data.metrics;
               
-              if (!fs.existsSync(path)) {
-                console.log("result.json not found");
-                return;
-              }
+              // Extract metrics using safe string keys
+              const avgVal = m['http_req_duration']?.values?.avg;
+              const p95Val = m['http_req_duration']?.values?.['p(95)'];
+              const rateVal = m['http_reqs']?.values?.rate || 0;
+              const countVal = m['http_reqs']?.values?.count || 0;
+              const failPasses = m['http_req_failed']?.values?.passes || 0;
               
-              const res = JSON.parse(fs.readFileSync(path, 'utf8'));
-              const m = res.metrics;
+              // Calculate success rate
+              const successPct = countVal > 0 
+                ? (((countVal - failPasses) / countVal) * 100).toFixed(2) 
+                : "0.00";
               
-              // Direct extraction from the k6 metrics object
-              const avg = m['http_req_duration']?.values?.avg ?? null;
-              const p95 = m['http_req_duration']?.values?.['p(95)'] ?? null;
-              const rate = m['http_reqs']?.values?.rate ?? 0;
-              const count = m['http_reqs']?.values?.count ?? 0;
-              const fails = m['http_req_failed']?.values?.passes ?? 0;
-              
-              const successRate = count > 0 ? (((count - fails) / count) * 100).toFixed(2) : '0';
-              
-              const commentBody = `### 🚀 Load Test Results
-              - **Avg Latency:** ${avg ? avg.toFixed(2) + 'ms' : 'N/A'}
-              - **P95 Latency:** ${p95 ? p95.toFixed(2) + 'ms' : 'N/A'}
-              - **Requests/sec:** ${Number(rate).toFixed(2)}
-              - **Success Rate:** ${successRate}%`;
+              // Build the comment body WITHOUT using ${} to avoid GitHub Action conflicts
+              let body = "### 🚀 Load Test Results\n";
+              body += "- **Avg Latency:** " + (avgVal ? avgVal.toFixed(2) + "ms" : "N/A") + "\n";
+              body += "- **P95 Latency:** " + (p95Val ? p95Val.toFixed(2) + "ms" : "N/A") + "\n";
+              body += "- **Requests/sec:** " + Number(rateVal).toFixed(2) + "\n";
+              body += "- **Success Rate:** " + successPct + "%";
               
               await github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                body: commentBody
+                body: body
               });
