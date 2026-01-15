@@ -52,33 +52,29 @@ jobs:
         with:
             script: |
               const fs = require('fs');
-              // Read and parse the file
-              const fileContent = fs.readFileSync('./result.json', 'utf8');
-              const data = JSON.parse(fileContent);
+              const file = fs.readFileSync('./result.json', 'utf8');
+              const data = JSON.parse(file);
               const m = data.metrics;
               
-              // Extract metrics using safe string keys
-              const avgVal = m['http_req_duration']?.values?.avg;
-              const p95Val = m['http_req_duration']?.values?.['p(95)'];
-              const rateVal = m['http_reqs']?.values?.rate || 0;
-              const countVal = m['http_reqs']?.values?.count || 0;
-              const failPasses = m['http_req_failed']?.values?.passes || 0;
+              // Extract values using safe string keys
+              const a = m['http_req_duration'] && m['http_req_duration'].values ? m['http_req_duration'].values.avg : null;
+              const p = m['http_req_duration'] && m['http_req_duration'].values ? m['http_req_duration'].values['p(95)'] : null;
+              const r = m['http_reqs'] && m['http_reqs'].values ? m['http_reqs'].values.rate : 0;
+              const c = m['http_reqs'] && m['http_reqs'].values ? m['http_reqs'].values.count : 0;
+              const f = m['http_req_failed'] && m['http_req_failed'].values ? m['http_req_failed'].values.passes : 0;
               
-              // Calculate success rate
-              const successPct = countVal > 0 
-                ? (((countVal - failPasses) / countVal) * 100).toFixed(2) 
-                : "0.00";
+              const s = c > 0 ? (((c - f) / c) * 100).toFixed(2) : "0.00";
               
-              // Build the comment body WITHOUT using ${} to avoid GitHub Action conflicts
-              let body = "### 🚀 Load Test Results\n";
-              body += "- **Avg Latency:** " + (avgVal ? avgVal.toFixed(2) + "ms" : "N/A") + "\n";
-              body += "- **P95 Latency:** " + (p95Val ? p95Val.toFixed(2) + "ms" : "N/A") + "\n";
-              body += "- **Requests/sec:** " + Number(rateVal).toFixed(2) + "\n";
-              body += "- **Success Rate:** " + successPct + "%";
+              // Build the body using ONLY string concatenation (+) to avoid GitHub Variable interference
+              var comment = "### 🚀 Load Test Results\n";
+              comment += "- **Avg Latency:** " + (a ? a.toFixed(2) + "ms" : "N/A") + "\n";
+              comment += "- **P95 Latency:** " + (p ? p.toFixed(2) + "ms" : "N/A") + "\n";
+              comment += "- **Requests/sec:** " + Number(r).toFixed(2) + "\n";
+              comment += "- **Success Rate:** " + s + "%";
               
-              await github.rest.issues.createComment({
+              github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                body: body
+                body: comment
               });
