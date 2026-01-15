@@ -6,13 +6,14 @@ on:
 jobs:
   integration-test:
     runs-on: ubuntu-latest
+    # Grant permissions to post the PR comment
     permissions:
-      contents: read        # Required to checkout the code
-      pull-requests: write  # Required to post comments on PRs
-      issues: write         # Sometimes required depending on how the comment is addressed
+      contents: read
+      pull-requests: write
+
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4 # Updated to v4
+        uses: actions/checkout@v4
 
       - name: Create KinD Cluster
         uses: helm/kind-action@v1.4.0
@@ -23,11 +24,12 @@ jobs:
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
           kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+          # Small buffer for NGINX to start listening
+          sleep 10
 
       - name: Deploy Applications
         run: |
-          # Ensure these files are in the 'k8s' folder in your repo
-          kubectl apply -f k8s/apps.yaml 
+          kubectl apply -f k8s/apps.yaml
           kubectl apply -f k8s/ingress.yaml
           kubectl wait --for=condition=available deployment/foo --timeout=60s
           kubectl wait --for=condition=available deployment/bar --timeout=60s
@@ -38,6 +40,7 @@ jobs:
       - name: Run Load Test
         id: k6test
         run: |
+          # k6 hits localhost which is mapped via kind-config.yaml
           k6 run scripts/load-test.js --summary-export=result.json
 
       - name: Post Results to PR
@@ -46,7 +49,7 @@ jobs:
           script: |
             const fs = require('fs');
             if (!fs.existsSync('result.json')) {
-              core.setFailed('result.json not found.');
+              core.setFailed('result.json not found. Load test likely failed.');
               return;
             }
 
