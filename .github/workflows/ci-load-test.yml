@@ -41,7 +41,7 @@ jobs:
       - name: Run k6 load test
         run: |
           k6 run --quiet \
-            --summary-export=results.json \
+            --summary-export=results-summary.json \
             --out json=results-raw.json \
             scripts/load-test.js
 
