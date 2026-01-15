@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Updated to v4
 
       - name: Create KinD Cluster
         uses: helm/kind-action@v1.4.0
@@ -22,7 +22,8 @@ jobs:
 
       - name: Deploy Applications
         run: |
-          kubectl apply -f k8s/apps.yaml
+          # Ensure these files are in the 'k8s' folder in your repo
+          kubectl apply -f k8s/apps.yaml 
           kubectl apply -f k8s/ingress.yaml
           kubectl wait --for=condition=available deployment/foo --timeout=60s
           kubectl wait --for=condition=available deployment/bar --timeout=60s
@@ -33,42 +34,38 @@ jobs:
       - name: Run Load Test
         id: k6test
         run: |
-          # Use --add-host to map localhost names inside the CI runner
           k6 run scripts/load-test.js --summary-export=result.json
 
       - name: Post Results to PR
         uses: actions/github-script@v6
         with:
-        script: |
-          const fs = require('fs');
-          // Ensure the file exists before reading
-          if (!fs.existsSync('result.json')) {
-            core.setFailed('result.json not found. The load test may have failed to run.');
-            return;
-          }
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('result.json')) {
+              core.setFailed('result.json not found.');
+              return;
+            }
 
-          const results = JSON.parse(fs.readFileSync('result.json'));
-          const metrics = results.metrics || {};
+            const results = JSON.parse(fs.readFileSync('result.json'));
+            const metrics = results.metrics || {};
 
-          // Use optional chaining (?.) and provide fallback values (0 or 'N/A')
-          const avgLatency = metrics.http_req_duration?.values?.avg?.toFixed(2) ?? 'N/A';
-          const p95Latency = metrics.http_req_duration?.values?.['p(95)']?.toFixed(2) ?? 'N/A';
-          const reqRate = metrics.http_reqs?.values?.rate?.toFixed(2) ?? '0';
+            const avgLatency = metrics.http_req_duration?.values?.avg?.toFixed(2) ?? 'N/A';
+            const p95Latency = metrics.http_req_duration?.values?.['p(95)']?.toFixed(2) ?? 'N/A';
+            const reqRate = metrics.http_reqs?.values?.rate?.toFixed(2) ?? '0';
 
-          // Calculate success rate safely
-          const fails = metrics.http_req_failed?.values?.fails ?? 0;
-          const count = metrics.http_reqs?.values?.count ?? 0;
-          const successRate = count > 0 ? ((count - fails) / count * 100).toFixed(2) : '0';
+            const fails = metrics.http_req_failed?.values?.fails ?? 0;
+            const count = metrics.http_reqs?.values?.count ?? 0;
+            const successRate = count > 0 ? ((count - fails) / count * 100).toFixed(2) : '0';
 
-          const comment = `### 🚀 Load Test Results
-          - **Avg Latency:** ${avgLatency}ms
-          - **P95 Latency:** ${p95Latency}ms
-          - **Requests/sec:** ${reqRate}
-          - **Success Rate:** ${successRate}%`;
+            const comment = `### 🚀 Load Test Results
+            - **Avg Latency:** \${avgLatency}ms
+            - **P95 Latency:** \${p95Latency}ms
+            - **Requests/sec:** \${reqRate}
+            - **Success Rate:** \${successRate}%`;
 
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
