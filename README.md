@@ -18,8 +18,6 @@ Ingress Controller: NGINX - The industry standard for handling host-based routin
 Load Testing: k6 (JavaScript) - Selected for its high performance and scriptability, leveraging my background in NodeJS and TypeScript.
 
 
-Scripting: Bash & Python - Used for orchestration and data parsing to ensure cross-platform compatibility.
-
 🏗 Architecture & Workflow
 The pipeline follows a strict "Secure-by-Design" and reliable deployment methodology:
 +1
@@ -47,8 +45,6 @@ Multi-Node Simulation: Unlike single-node setups, this cluster tests the distrib
 Error Handling: Implements robust root cause analysis (RCA) logic within the pipeline to fail fast if the ingress or deployments do not reach a "Healthy" state within the timeout period.
 
 
-ITSM Compliance: Follows standard operating procedures (SOPs) for deployment documentation and version control.
-
 ⏱ Time Estimates
 Total Time Taken: ~4.5 hours.
 
@@ -67,13 +63,4 @@ Documentation & Refinement: 1 hour
 Observability: Integrating a Prometheus sidecar to capture CPU and Memory utilization during load spikes.
 
 
-Scalability: Migrating from static manifests to Helm charts to eliminate configuration boilerplate.
-
-
-Security Scanning: Integrating AppSec tools to scan container images before deployment to the KinD cluster.
-
-
-Author: Hai Nguyen – Development Manager Certifications: CKA, AWS Solutions Architect Associate, MCSE 
-+2
-
-Would you like me to help you format the final GitHub PR comment template to ensure the load test results look professional for the reviewers?
+Author: Hai Nguyen – Devops Engineer
