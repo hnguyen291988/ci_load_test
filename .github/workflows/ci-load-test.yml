@@ -64,11 +64,9 @@ jobs:
                 RPS=$(jq -r '.metrics.http_reqs.rate // "0.00"' results-summary.json 2>/dev/null || echo "0.00")
                 
                 # Success rate from checks (most common for overall success %)
-                CHECK_RATE=$(jq -r '.metrics.checks.values.rate // 0' results-summary.json 2>/dev/null || echo 0)
+                CHECK_RATE=$(jq -r '.metrics.checks.value // 0' results-summary.json 2>/dev/null || echo 0)
                 SUCCESS=$(awk "BEGIN {printf \"%.2f\", $CHECK_RATE * 100}")
                 
-                # Fallback if you use http_req_failed or other threshold
-                # SUCCESS=$(jq -r '(.metrics.http_req_failed.values.rate // 1) * 100 | 100 - .' results-summary.json | awk '{printf "%.2f", $0}')
                 
                 {
                   echo "**Load Test Results**"
