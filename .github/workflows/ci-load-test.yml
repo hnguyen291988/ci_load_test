@@ -1,0 +1,57 @@
+name: CI Load Test
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Create KinD Cluster
+        uses: helm/kind-action@v1.4.0
+        with:
+          config: kind-config.yaml
+
+      - name: Deploy NGINX Ingress
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+
+      - name: Deploy Applications
+        run: |
+          kubectl apply -f k8s/apps.yaml
+          kubectl apply -f k8s/ingress.yaml
+          kubectl wait --for=condition=available deployment/foo --timeout=60s
+          kubectl wait --for=condition=available deployment/bar --timeout=60s
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run Load Test
+        id: k6test
+        run: |
+          # Use --add-host to map localhost names inside the CI runner
+          k6 run scripts/load-test.js --summary-export=result.json
+
+      - name: Post Results to PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('result.json'));
+            const metrics = results.metrics;
+            const comment = `### 🚀 Load Test Results
+            - **Avg Latency:** ${metrics.http_req_duration.values.avg.toFixed(2)}ms
+            - **P95 Latency:** ${metrics.http_req_duration.values['p(95)'].toFixed(2)}ms
+            - **Requests/sec:** ${metrics.http_reqs.values.rate.toFixed(2)}
+            - **Success Rate:** ${(metrics.http_req_failed.values.fails / metrics.http_reqs.values.count * 100).toFixed(2)}%`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
