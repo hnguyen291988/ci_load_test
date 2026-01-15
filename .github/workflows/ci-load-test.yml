@@ -47,36 +47,33 @@ jobs:
       - name: Post Results to PR
         uses: actions/github-script@v6
         with:
-          script: |
-            const fs = require('fs');
-            if (!fs.existsSync('result.json')) {
-              core.setFailed('result.json not found.');
-              return;
-            }
+            script: |
+              const fs = require('fs');
+              if (!fs.existsSync('result.json')) {
+                core.setFailed('result.json not found.');
+                return;
+              }
               
-            const results = JSON.parse(fs.readFileSync('result.json'));
-            const metrics = results.metrics || {};
+              const results = JSON.parse(fs.readFileSync('result.json'));
+              const metrics = results.metrics || {};
               
-            // 1. Calculate values
-            const avg = metrics.http_req_duration?.values?.avg?.toFixed(2) ?? 'N/A';
-            const p95 = metrics.http_req_duration?.values?.['p(95)']?.toFixed(2) ?? 'N/A';
-            const rate = metrics.http_reqs?.values?.rate?.toFixed(2) ?? '0';
-            const fails = metrics.http_req_failed?.values?.fails ?? 0;
-            const count = metrics.http_reqs?.values?.count ?? 0;
-            const success = count > 0 ? ((count - fails) / count * 100).toFixed(2) : '0';
+              const avg = metrics.http_req_duration?.values?.avg?.toFixed(2) ?? 'N/A';
+              const p95 = metrics.http_req_duration?.values?.['p(95)']?.toFixed(2) ?? 'N/A';
+              const rate = metrics.http_reqs?.values?.rate?.toFixed(2) ?? '0';
+              const fails = metrics.http_req_failed?.values?.fails ?? 0;
+              const count = metrics.http_reqs?.values?.count ?? 0;
+              const success = count > 0 ? ((count - fails) / count * 100).toFixed(2) : '0';
               
-            // 2. Build the string using standard JS template literals
-            // Note: Ensure there are NO backslashes before the $ signs
-            const body = `### 🚀 Load Test Results
-            - **Avg Latency:** ${avg}ms
-            - **P95 Latency:** ${p95}ms
-            - **Requests/sec:** ${rate}
-            - **Success Rate:** ${success}%`;
+              // Using '+' instead of backticks to ensure GitHub doesn't misinterpret the variables
+              let commentBody = '### 🚀 Load Test Results\n';
+              commentBody += '- **Avg Latency:** ' + avg + 'ms\n';
+              commentBody += '- **P95 Latency:** ' + p95 + 'ms\n';
+              commentBody += '- **Requests/sec:** ' + rate + '\n';
+              commentBody += '- **Success Rate:** ' + success + '%';
               
-            // 3. Post the comment
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: body
-            });
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: commentBody
+              });
