@@ -6,6 +6,10 @@ on:
 jobs:
   integration-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read        # Required to checkout the code
+      pull-requests: write  # Required to post comments on PRs
+      issues: write         # Sometimes required depending on how the comment is addressed
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4 # Updated to v4
