@@ -1,0 +1,85 @@
+name: CI Load Test
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    # Grant permissions to post the PR comment
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Create KinD Cluster
+        uses: helm/kind-action@v1.4.0
+        with:
+          config: kind-config.yaml
+
+      - name: Deploy NGINX Ingress
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+          # Small buffer for NGINX to start listening
+          sleep 10
+
+      - name: Deploy Applications
+        run: |
+          kubectl apply -f k8s/apps.yaml
+          kubectl apply -f k8s/ingress.yaml
+          kubectl wait --for=condition=available deployment/foo --timeout=60s
+          kubectl wait --for=condition=available deployment/bar --timeout=60s
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      # In your load-test workflow, in the step that runs k6
+      - name: Run k6 load test
+        run: |
+          k6 run --quiet \
+            --summary-export=results-summary.json \
+            --out json=results-raw.json \
+            scripts/load-test.js
+
+      - name: Debug - Show k6 results file
+        if: always()
+        run: |
+                ls -l results-summary.json || echo "File missing!"
+                cat results-summary.json || echo "File empty or not found"
+
+      - name: Post Load Test Results to PR
+        if: always()   # run even if k6 had threshold failures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+                # Use jq to safely extract values (install jq if not present)
+                sudo apt-get update && sudo apt-get install -y jq
+                
+                AVG=$(jq -r '.metrics.http_req_duration.avg // "N/A"' results-summary.json 2>/dev/null || echo "N/A")
+                P95=$(jq -r '.metrics.http_req_duration["p(95)"] // "N/A"' results-summary.json 2>/dev/null || echo "N/A")
+                RPS=$(jq -r '.metrics.http_reqs.rate // "0.00"' results-summary.json 2>/dev/null || echo "0.00")
+                
+                # Success rate from checks (most common for overall success %)
+                CHECK_RATE=$(jq -r '.metrics.checks.value // 0' results-summary.json 2>/dev/null || echo 0)
+                SUCCESS=$(awk "BEGIN {printf \"%.2f\", $CHECK_RATE * 100}")
+                
+                
+                {
+                  echo "**Load Test Results**"
+                  echo ""
+                  echo "* Avg Latency: ${AVG} ms"
+                  echo "* P95 Latency: ${P95} ms"
+                  echo "* Requests/sec: ${RPS}"
+                  echo "* Success Rate: ${SUCCESS}%"
+                  echo ""
+                  echo "(Generated from k6 summary export)"
+                } > comment.md
+                
+                # Post comment (works for both PRs and issue-like comments)
+                gh pr comment ${{ github.event.pull_request.number || github.event.number }} \
+                  --body-file comment.md \
+                  --repo ${{ github.repository }}
